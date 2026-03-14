@@ -2,3 +2,5 @@ Model,Precision (Fraud),Recall (Fraud),F1-Score (Fraud),ROC-AUC
 Logistic Regression,0.0581,0.9184,0.1094,0.9698
 Random Forest,0.8454,0.8367,0.8410,0.9731
 XGBoost,0.7311,0.8878,0.8018,0.9792
+Decision Tree,0.0798,0.8061,0.1452,0.8951
+XGBoost Tuned,0.8173,0.8673,0.8416,0.9777
