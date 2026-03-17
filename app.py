@@ -38,7 +38,7 @@ y_pred_test = (y_prob_test >= 0.86).astype(int)
 
 #Sidebar
 st.sidebar.title("Navigation")
-page = st.sidebar.radio("Go to", ["Home", "Predict Transaction", "Model Performance"])
+page = st.sidebar.radio("Go to", ["Home", "Predict Transaction", "Model Performance", "Dataset Analysis"])
 
 # ============================================================
 # HOME PAGE
@@ -195,3 +195,148 @@ elif page == "Model Performance":
         'Std Dev (+/-)': [0.0141, 0.0306, 0.0220, 0.0386]
     })
     st.dataframe(cv_data, use_container_width=True, hide_index=True)
+# ============================================================
+# DATASET ANALYSIS PAGE
+# ============================================================
+elif page == "Dataset Analysis":
+    st.title("Dataset Analysis")
+    st.write("Exploratory analysis of the credit card transaction dataset.")
+    st.markdown("---")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Dataset Overview")
+        st.write(f"**Total transactions:** {len(df):,}")
+        st.write(f"**Legitimate:** {(df['Class']==0).sum():,} ({(df['Class']==0).mean()*100:.2f}%)")
+        st.write(f"**Fraudulent:** {(df['Class']==1).sum():,} ({(df['Class']==1).mean()*100:.2f}%)")
+        st.write(f"**Number of features:** {df.shape[1]-1}")
+        st.write(f"**Missing values:** {df.isnull().sum().sum()}")
+
+        st.markdown("---")
+        st.subheader("Amount Statistics by Class")
+        amount_stats = df.groupby('Class')['Amount'].describe().round(2)
+        amount_stats.index = ['Legitimate', 'Fraud']
+        st.dataframe(amount_stats, use_container_width=True)
+
+    with col2:
+        st.subheader("Transaction Amount Distribution")
+        fig, ax = plt.subplots(figsize=(6, 4))
+        legit = df[df['Class'] == 0]['Amount']
+        fraud = df[df['Class'] == 1]['Amount']
+        ax.hist(legit[legit <= 500], bins=50, alpha=0.7,
+                color='steelblue', label='Legitimate')
+        ax.hist(fraud[fraud <= 500], bins=50, alpha=0.7,
+                color='crimson', label='Fraud')
+        ax.set_xlabel('Amount (£)')
+        ax.set_ylabel('Frequency')
+        ax.set_title('Amount Distribution (up to £500)')
+        ax.legend()
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close()
+
+    st.markdown("---")
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Fraud Rate by Hour of Day")
+        df_temp = df.copy()
+        df_temp['Time_Hour'] = (df_temp['Time'] / 3600) % 24
+        hourly_fraud = df_temp.groupby(
+            df_temp['Time_Hour'].astype(int))['Class'].mean() * 100
+
+        fig, ax = plt.subplots(figsize=(6, 4))
+        ax.plot(hourly_fraud.index, hourly_fraud.values,
+                color='crimson', lw=2, marker='o', markersize=4)
+        ax.set_xlabel('Hour of Day')
+        ax.set_ylabel('Fraud Rate (%)')
+        ax.set_title('Fraud Rate by Hour of Day')
+        ax.grid(alpha=0.3)
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close()
+
+    with col2:
+        st.subheader("Transaction Volume by Hour of Day")
+        df_temp['Time_Hour'] = (df_temp['Time'] / 3600) % 24
+        hourly_volume = df_temp.groupby(
+            df_temp['Time_Hour'].astype(int)).size()
+
+        fig, ax = plt.subplots(figsize=(6, 4))
+        ax.bar(hourly_volume.index, hourly_volume.values,
+               color='steelblue', edgecolor='black', alpha=0.8)
+        ax.set_xlabel('Hour of Day')
+        ax.set_ylabel('Number of Transactions')
+        ax.set_title('Transaction Volume by Hour of Day')
+        ax.grid(axis='y', alpha=0.3)
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close()
+
+    st.markdown("---")
+    st.subheader("Batch Transaction Simulation")
+    st.write("Simulate real-time monitoring on a stream of transactions.")
+
+    n_transactions = st.slider("Number of transactions", 
+                                min_value=10, max_value=50, value=20)
+    fraud_count = st.slider("Fraud cases to include", 
+                             min_value=1, max_value=10, value=5)
+
+    if st.button("Run Simulation", type="primary"):
+        fraud_indices = y_test[y_test == 1].sample(
+            n=fraud_count, random_state=42).index
+        legit_count = n_transactions - fraud_count
+        legit_indices = y_test[y_test == 0].sample(
+            n=legit_count, random_state=42).index
+        sample_indices = fraud_indices.append(legit_indices)
+
+        sample_X = X_test.loc[sample_indices].copy()
+        sample_y = y_test.loc[sample_indices]
+
+        shuffle_idx = sample_X.sample(frac=1, random_state=42).index
+        sample_X = sample_X.loc[shuffle_idx]
+        sample_y = sample_y.loc[shuffle_idx]
+
+        probs = model.predict_proba(sample_X)[:, 1]
+        preds = (probs >= 0.86).astype(int)
+
+        results_data = []
+        for actual, pred, prob in zip(sample_y, preds, probs):
+            results_data.append({
+                'Actual': 'FRAUD' if actual == 1 else 'LEGIT',
+                'Predicted': 'FRAUD' if pred == 1 else 'LEGIT',
+                'Fraud Probability (%)': round(prob * 100, 2),
+                'Risk Level': 'HIGH' if prob >= 0.86 else (
+                    'MEDIUM' if prob >= 0.50 else 'LOW'),
+                'Status': 'CORRECT' if actual == pred else 'WRONG'
+            })
+
+        results_df = pd.DataFrame(results_data)
+
+        def highlight_rows(row):
+            if row['Actual'] == 'FRAUD' and row['Predicted'] == 'FRAUD':
+                return ['background-color: #ffcccc'] * len(row)
+            elif row['Status'] == 'WRONG':
+                return ['background-color: #fff3cc'] * len(row)
+            else:
+                return [''] * len(row)
+
+        st.dataframe(results_df.style.apply(highlight_rows, axis=1),
+                     use_container_width=True)
+
+        correct = (results_df['Status'] == 'CORRECT').sum()
+        fraud_caught = ((results_df['Actual'] == 'FRAUD') &
+                       (results_df['Predicted'] == 'FRAUD')).sum()
+        false_positives = ((results_df['Actual'] == 'LEGIT') &
+                          (results_df['Predicted'] == 'FRAUD')).sum()
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Accuracy",
+                      f"{correct}/{n_transactions} ({correct/n_transactions*100:.1f}%)")
+        with col2:
+            st.metric("Fraud Detected", f"{fraud_caught}/{fraud_count}")
+        with col3:
+            st.metric("False Positives",
+                      f"{false_positives}/{n_transactions - fraud_count}")
