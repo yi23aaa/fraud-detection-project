@@ -37,6 +37,9 @@ This project develops an advanced fraud detection system by analysing historical
 2. Install dependencies: `pip install -r requirements.txt`
 3. Add `creditcard.csv` to the project folder (not included due to size)
 4. Open `fraud_detection.ipynb` and run all cells
+cd C:\Users\yusuf\fraud-detection-project
+conda activate fraud-env
+streamlit run app.py
 
 ## Requirements
 - Python 3.11
